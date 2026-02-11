@@ -41,6 +41,7 @@ class HttpClient:
 
     @classmethod
     def from_env(cls) -> "HttpClient":
+        # Allow operators to relax TLS in intercepted corporate networks.
         insecure = os.environ.get("FOOTBALLAPI_INSECURE_TLS", "").strip().lower()
         verify = insecure not in {"1", "true", "yes", "on"}
         timeout = os.environ.get("FOOTBALLAPI_TIMEOUT_SECONDS", "").strip()
@@ -154,6 +155,7 @@ def _sofascore_status(status_obj: dict[str, Any] | None) -> str:
 
 
 def parse_goal_live_scores_html(html: str) -> list[dict[str, Any]]:
+    # Goal embeds structured match data in a Next.js payload script tag.
     match = GOAL_NEXT_DATA_PATTERN.search(html)
     if not match:
         raise ProviderError("Goal payload did not include __NEXT_DATA__")
@@ -207,6 +209,7 @@ def parse_espn_scoreboard_payload(
     for event in events:
         competition = (event.get("competitions") or [{}])[0]
         competitors = competition.get("competitors") or []
+        # ESPN usually tags home/away explicitly; fallback to first two rows if missing.
         home = next((c for c in competitors if c.get("homeAway") == "home"), None)
         away = next((c for c in competitors if c.get("homeAway") == "away"), None)
         if home is None or away is None:
@@ -282,6 +285,7 @@ def parse_sofascore_live_payload(
                 "status": _sofascore_status(event.get("status") or {}),
                 "raw_status": (event.get("status") or {}).get("description"),
                 "period": (event.get("status") or {}).get("description"),
+                # SofaScore minute formats vary across competitions. Keep period text only.
                 "minute": None,
                 "extra_minute": None,
                 "start_time_utc": epoch_seconds_to_iso_utc(_to_int(event.get("startTimestamp"))),
@@ -320,6 +324,7 @@ def parse_streamed_live_payload(
                 "competition": None,
                 "home_team": home_team,
                 "away_team": away_team,
+                # Streamed live feed is used for match discovery/watch URLs, not score truth.
                 "home_score": None,
                 "away_score": None,
                 "status": "unknown",

@@ -72,6 +72,7 @@ def _match_records(
     max_minutes_diff: float = 180.0,
     min_similarity: float = 0.74,
 ) -> list[MatchLink]:
+    # Greedy one-to-one linking by team-name similarity plus kickoff proximity.
     links: list[MatchLink] = []
     used_candidates: set[int] = set()
 
@@ -94,6 +95,7 @@ def _match_records(
                 str(candidate.get("away_team") or ""),
             )
             if minute_gap is not None:
+                # Favor matches with close start times to reduce false joins.
                 similarity += max(0.0, 1.0 - (minute_gap / max_minutes_diff)) * 0.10
             if best is None or similarity > best.similarity:
                 best = MatchLink(
@@ -118,6 +120,7 @@ def merge_provider_matches(
 ) -> list[dict[str, Any]]:
     sofa_rows = sofa_rows or []
     merged: list[dict[str, Any]] = []
+    # Start with Goal as the base feed, then enrich/verify with other sources.
     for row in goal_rows:
         merged_row = copy.deepcopy(row)
         merged_row["sources"] = ["goal"]
@@ -147,6 +150,7 @@ def merge_provider_matches(
 
         goal_scores = _score_pair(goal_row)
         espn_scores = _score_pair(espn_row)
+        # Strongest signal is exact score agreement across sources.
         if goal_scores == espn_scores and None not in goal_scores:
             goal_row["verification"] = "confirmed_by_multiple_sources"
             goal_row["confidence"] = max(goal_row["confidence"], 0.95)
@@ -174,6 +178,7 @@ def merge_provider_matches(
     for index, espn_row in enumerate(espn_rows):
         if index in linked_espn:
             continue
+        # Keep unmatched ESPN rows so coverage is not lost when Goal misses a fixture.
         row = copy.deepcopy(espn_row)
         row["sources"] = ["espn"]
         row["confidence"] = 0.68
@@ -227,6 +232,7 @@ def merge_provider_matches(
     for index, sofa_row in enumerate(sofa_rows):
         if index in linked_sofa:
             continue
+        # Keep unmatched SofaScore rows to preserve broad live-market visibility.
         row = copy.deepcopy(sofa_row)
         row["sources"] = ["sofascore"]
         row["confidence"] = 0.74
@@ -240,6 +246,7 @@ def merge_provider_matches(
         streamed_row = streamed_rows[link.candidate_index]
         watch_url = streamed_row.get("streamed_watch_url")
         if watch_url:
+            # Streamed contributes watch links only; score data is intentionally ignored.
             merged_row["streamed_watch_url"] = watch_url
             if "streamed" not in merged_row["sources"]:
                 merged_row["sources"].append("streamed")
@@ -326,6 +333,7 @@ class LiveScoreService:
         provider_rows: dict[str, list[dict[str, Any]]] = {}
         provider_errors: dict[str, str] = {}
 
+        # Pull providers in parallel to reduce end-to-end API latency.
         with ThreadPoolExecutor(max_workers=max(1, len(self.providers))) as executor:
             future_map = {executor.submit(p.fetch_matches): p for p in self.providers}
             for future in as_completed(future_map):
@@ -411,6 +419,7 @@ class LiveScoreService:
         include_stale: bool,
         include_conflicts: bool,
     ) -> tuple[list[dict[str, Any]], int, int]:
+        # Quality gate drops stale live rows and score conflicts by default.
         reference_time = parse_iso_utc(generated_at_utc) or parse_iso_utc(utc_now_iso())
         if reference_time is None:
             return list(matches), 0, 0

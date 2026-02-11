@@ -23,6 +23,7 @@ class LiveScoreRequestHandler(BaseHTTPRequestHandler):
             self._write_json(200, {"ok": True})
             return
         if parsed.path in {"/live-scores", "/api/live-scores"}:
+            # Query flags map directly to service-level filtering and quality gates.
             query = parse_qs(parsed.query)
             status = (query.get("status") or ["live"])[0]
             source = (query.get("source") or ["all"])[0]
@@ -50,6 +51,7 @@ class LiveScoreRequestHandler(BaseHTTPRequestHandler):
         self._write_json(404, {"ok": False, "error": "Not found"})
 
     def log_message(self, format: str, *args) -> None:  # noqa: A003
+        # Keep noisy default HTTP logs out of embedding/serverless contexts.
         return
 
     def _send_cors_headers(self) -> None:
